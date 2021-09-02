@@ -169,7 +169,9 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 		self.paddle_b = PaddleB()
 
 	def _step(self,action):
-		
+
+		if action ==1:
+			
 
 
 
