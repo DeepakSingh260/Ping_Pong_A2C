@@ -62,6 +62,7 @@ class Ball:
 		self.y = 400
 		self.x_vel = 2
 		self.y_vel = 2
+		self.reset  = False 
 
 	def reset(self):
 
@@ -81,7 +82,7 @@ class Ball:
 			self.y_vel = -self.y_vel
 
 		if self.x <=0 or self.x>=600 :
-			reset()
+			self.reset = True
 
 		if self.x  -50 <= paddle_a.x and self.y >= paddle_a.y and self.y <= paddle_a.y+100:
 			 self.x_vel = -self.x_vel  +np.random.randint(-1, 1) 
@@ -145,10 +146,14 @@ while True:
 
 class Ping_Pong_Env(py_environment.PyEnvironment):
 
-	def __init__(self):
+	def __init__(self , Str):
 		self.ball = Ball()
-		self.paddle_a = PaddleA()
-		self.paddle_b = PaddleB()
+		self.Str  = Str
+		if self.Str == 'a':
+			self.paddle = PaddleA()
+
+		if self.Str == 'b':
+			self.paddle = PaddleB()
 		self._action_spec = array_spec.BoundedArraySpec(shape = () , dtype = np.int32 , minimum = 0 ,maximum = 1 , name = 'action')
 		self._observation_spec = array_spec.BoundedArraySpec(shape=(3,) , dtype = np.int32 , name = 'observation' )
 		self._episode_ended = False
@@ -163,15 +168,38 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 	def _reset(self):
 		self.ball = None 
 		self.ball = Ball()
-		self.paddle_a = None 
-		self.paddle_a = PaddleA()
-		self.paddle_b = None
-		self.paddle_b = PaddleB()
+		if self.Str == 'a':
+			self.paddle = PaddleA()
+
+		if self.Str == 'b':
+			self.paddle = PaddleB()
 
 	def _step(self,action):
 
 		if action ==1:
-			
+			paddle_a.move(100)
+
+		elif action == 0:
+			paddle_a.move(-100)
+
+
+		if self.Str == 'a' and self.ball.reset == True:
+			self.ball.reset = False
+			self._reset()
+
+		if self.Str == 'b' and self.ball.reset == True:
+			self.ball.reset = False
+			self._reset()
+
+
+
+	def action_spec(self):
+
+		return self._action_spec
+
+	def observation_spec(self):
+
+		return self._observation_spec
 
 
 
