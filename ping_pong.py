@@ -2,6 +2,9 @@ import pygame
 import numpy as np 
 import time 
 import tensorflow as tf
+from tf_agents.specs import array_spec , tensor_spec
+from tf_agents.trajectories import time_step as ts 
+
 from tf_agents.environments import py_environment
 WIN = pygame.display.set_mode((600,800))
 pygame.font.init()
@@ -174,6 +177,9 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 		if self.Str == 'b':
 			self.paddle = PaddleB()
 
+		self._current_time_step = ts.restart(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] ,dtype = np.int32 ))
+		return self._current_time_step
+
 	def _step(self,action):
 
 		if action ==1:
@@ -185,11 +191,25 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 
 		if self.Str == 'a' and self.ball.reset == True:
 			self.ball.reset = False
+			self._current_time_step = ts.termination(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] , dtype = np.int32 ) , reward = -1000 )
 			self._reset()
+			return self._current_time_step
 
 		if self.Str == 'b' and self.ball.reset == True:
 			self.ball.reset = False
+			self._current_time_step = ts.termination(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] , dtype = np.int32 ) , reward = -1000 )
 			self._reset()
+			return self._current_time_step
+
+		if self.Str == 'a':
+			if self.ball.x  -50 <= self.paddle.x and self.ball.y >= self.paddle.y and self.ball.y <= self.paddle.y+100:
+				 
+				self._current_time_step = ts.transition(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] , dtype = np.int32) , reward = 1000, discount = 1)
+
+			else :
+	 			self._current_time_step = ts.transition(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] , dtype = np.int32) , reward = 1, discount = 1)
+ 
+
 
 
 
@@ -201,6 +221,28 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 
 		return self._observation_spec
 
+
+
+Class Actor_Critic_A(tf.keras.Model):
+
+	def __init__(self , num_actions , num_hidden_units):
+
+		super().__init__()
+
+		self.common = layers.Dense(num_hidden_units ,activation = 'relu')
+		self.actor = layers.Dense(num_actions , activation = 'softmax')
+		self.critic = layers.Dense(1)
+
+	def call(self,inputs):
+
+		x = self.common(inputs)
+		return self.actor(x) , self.critic(x)
+
+
+num_actions = env.action_space.n  # 2
+num_hidden_units = 128
+
+model = ActorCritic(num_actions, num_hidden_units)
 
 
 
