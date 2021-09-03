@@ -4,7 +4,8 @@ import time
 import tensorflow as tf
 from tf_agents.specs import array_spec , tensor_spec
 from tf_agents.trajectories import time_step as ts 
-
+from tf_agents.environments import tf_py_environment
+from tensorflow.keras import layers
 from tf_agents.environments import py_environment
 WIN = pygame.display.set_mode((600,800))
 pygame.font.init()
@@ -125,26 +126,29 @@ def draw_window():
 
 	pygame.display.update()
 
-while True:
-	for event in pygame.event.get():
-			if event.type == pygame.QUIT:
+# while True:
+# 	for event in pygame.event.get():
+# 			if event.type == pygame.QUIT:
 				
-				pygame.quit()
-				quit()
-				break
+# 				pygame.quit()
+# 				quit()
+# 				break
 
-			if event.type == pygame.KEYDOWN:
-				if event.key == pygame.K_UP:
-					paddle_a.move(-100)
-				if event.key == pygame.K_DOWN:
-					paddle_a.move(100)
-				if event.key == pygame.K_w:
-					paddle_b.move(-100)
-				if event.key == pygame.K_s:
-					paddle_b.move(100)
+# 			if event.type == pygame.KEYDOWN:
+# 				if event.key == pygame.K_UP:
+# 					paddle_a.move(-100)
+# 				if event.key == pygame.K_DOWN:
+# 					paddle_a.move(100)
+# 				if event.key == pygame.K_w:
+# 					paddle_b.move(-100)
+# 				if event.key == pygame.K_s:
+# 					paddle_b.move(100)
+
+# 			if ball.reset == True:
+# 				break
 									
-	draw_window()
-	ball.move(paddle_a , paddle_b)
+# 	draw_window()
+# 	ball.move(paddle_a , paddle_b)
 
 
 class Ping_Pong_Env(py_environment.PyEnvironment):
@@ -209,8 +213,16 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 			else :
 	 			self._current_time_step = ts.transition(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] , dtype = np.int32) , reward = 1, discount = 1)
  
+		if self.Str == 'b':
+			if self.ball.x + 25 >= self.paddle.x and self.ball.y >= self.paddle.y and self.ball.y <= self.paddle.y+100:
+				 
+				self._current_time_step = ts.transition(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] , dtype = np.int32) , reward = 1000, discount = 1)
 
+			else :
+	 			self._current_time_step = ts.transition(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] , dtype = np.int32) , reward = 1, discount = 1)
+ 
 
+		return self._current_time_step
 
 
 	def action_spec(self):
@@ -222,8 +234,13 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 		return self._observation_spec
 
 
+py_env_a = Ping_Pong_Env('a')
+py_env_a = tf_py_environment.TFPyEnvironment(py_env_a)
+py_env_b = Ping_Pong_Env('b')
+py_env_b = tf_py_environment.TFPyEnvironment(py_env_b)
 
-Class Actor_Critic_A(tf.keras.Model):
+
+class Actor_Critic_A(tf.keras.Model):
 
 	def __init__(self , num_actions , num_hidden_units):
 
@@ -239,11 +256,11 @@ Class Actor_Critic_A(tf.keras.Model):
 		return self.actor(x) , self.critic(x)
 
 
-num_actions = env.action_space.n  # 2
+num_actions = 2
 num_hidden_units = 128
 
-model = ActorCritic(num_actions, num_hidden_units)
-
+modelA = Actor_Critic_A(num_actions, num_hidden_units)
+modelB = Actor_Critic_A(num_actions , num_hidden_units)
 
 
 
