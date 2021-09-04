@@ -156,13 +156,13 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 	def __init__(self , Str):
 		self.ball = Ball()
 		self.Str  = Str
-		if self.Str == 'a':
-			self.paddle = PaddleA()
 
-		if self.Str == 'b':
-			self.paddle = PaddleB()
-		self._action_spec = array_spec.BoundedArraySpec(shape = () , dtype = np.int32 , minimum = 0 ,maximum = 1 , name = 'action')
-		self._observation_spec = array_spec.BoundedArraySpec(shape=(3,) , dtype = np.int32 , name = 'observation' )
+		self.paddle_a = PaddleA()
+
+
+		self.paddle_b= PaddleB()
+		self._action_spec = array_spec.BoundedArraySpec(shape = () , dtype =np.float32 , minimum = 0 ,maximum = 1 , name = 'action')
+		self._observation_spec = array_spec.BoundedArraySpec(shape=(6,) , dtype = np.int32 , name = 'observation' )
 		self._episode_ended = False
 
 	def render(self):
@@ -175,53 +175,48 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 	def _reset(self):
 		self.ball = None 
 		self.ball = Ball()
-		if self.Str == 'a':
-			self.paddle = PaddleA()
+		self.paddle_a = PaddleA()
 
-		if self.Str == 'b':
-			self.paddle = PaddleB()
+		self.paddle_b = PaddleB()
 
-		self._current_time_step = ts.restart(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] ,dtype = np.int32 ))
+		self._current_time_step = ts.restart(np.array([self.paddle_a.y ,self.paddle_a.x- self.ball.x ,self.paddle_a.y-self.ball.y,self.paddle_b.y ,self.paddle_b.x- self.ball.x ,self.paddle_b.y-self.ball.y] ,dtype = np.int32 ))
 		return self._current_time_step
 
-	def _step(self,action):
+	def _step(self,action ,s):
 
-		if action ==1:
-			paddle_a.move(100)
+		if s == 'a':
 
-		elif action == 0:
-			paddle_a.move(-100)
+			if action <0.5:
+				paddle_a.move(100)
+
+			elif action == 0:
+				paddle_a.move(-100)
+
+		if s == 'b':
+
+			if action <=0.5:
+				paddle_b.move(100)
+
+			elif action == 0:
+				paddle_b.move(-100)
 
 
-		if self.Str == 'a' and self.ball.reset == True:
+	
+
+		if self.ball.reset == True:
 			self.ball.reset = False
-			self._current_time_step = ts.termination(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] , dtype = np.int32 ) , reward = -1000 )
+			self._current_time_step = ts.termination(np.array([self.paddle_a.y ,self.paddle_a.x- self.ball.x ,self.paddle_a.y-self.ball.y,self.paddle_b.y ,self.paddle_b.x- self.ball.x ,self.paddle_b.y-self.ball.y] , dtype = np.int32 ) , reward = -1000 )
 			self._reset()
 			return self._current_time_step
 
-		if self.Str == 'b' and self.ball.reset == True:
-			self.ball.reset = False
-			self._current_time_step = ts.termination(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] , dtype = np.int32 ) , reward = -1000 )
-			self._reset()
-			return self._current_time_step
+		if (self.ball.x  -50 <= self.paddle_a.x and self.ball.y >= self.paddle_a.y and self.ball.y <= self.paddle_a.y+100) or(self.ball.x + 25 >= self.paddle_b.x and self.ball.y >= self.paddle_b.y and self.ball.y <= self.paddle_b.y+100):
+			 
+			self._current_time_step = ts.transition(np.array([self.paddle_a.y ,self.paddle_a.x- self.ball.x ,self.paddle_a.y-self.ball.y,self.paddle_b.y ,self.paddle_b.x- self.ball.x ,self.paddle_b.y-self.ball.y] , dtype = np.int32) , reward = 1000, discount = 1)
 
-		if self.Str == 'a':
-			if self.ball.x  -50 <= self.paddle.x and self.ball.y >= self.paddle.y and self.ball.y <= self.paddle.y+100:
-				 
-				self._current_time_step = ts.transition(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] , dtype = np.int32) , reward = 1000, discount = 1)
+		else :
+ 			self._current_time_step = ts.transition(np.array([self.paddle_a.y ,self.paddle_a.x- self.ball.x ,self.paddle_a.y-self.ball.y,self.paddle_b.y ,self.paddle_b.x- self.ball.x ,self.paddle_b.y-self.ball.y] , dtype = np.int32) , reward = 1, discount = 1)
 
-			else :
-	 			self._current_time_step = ts.transition(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] , dtype = np.int32) , reward = 1, discount = 1)
- 
-		if self.Str == 'b':
-			if self.ball.x + 25 >= self.paddle.x and self.ball.y >= self.paddle.y and self.ball.y <= self.paddle.y+100:
-				 
-				self._current_time_step = ts.transition(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] , dtype = np.int32) , reward = 1000, discount = 1)
-
-			else :
-	 			self._current_time_step = ts.transition(np.array([self.paddle.y ,self.paddle.x- self.ball.x ,self.paddle.y-self.ball.y] , dtype = np.int32) , reward = 1, discount = 1)
- 
-
+		
 		return self._current_time_step
 
 
@@ -234,10 +229,9 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 		return self._observation_spec
 
 
-py_env_a = Ping_Pong_Env('a')
-py_env_a = tf_py_environment.TFPyEnvironment(py_env_a)
-py_env_b = Ping_Pong_Env('b')
-py_env_b = tf_py_environment.TFPyEnvironment(py_env_b)
+py_env = Ping_Pong_Env('a')
+py_env= tf_py_environment.TFPyEnvironment(py_env)
+
 
 
 class Actor_Critic_A(tf.keras.Model):
@@ -261,6 +255,48 @@ num_hidden_units = 128
 
 modelA = Actor_Critic_A(num_actions, num_hidden_units)
 modelB = Actor_Critic_A(num_actions , num_hidden_units)
+
+def run_episode(initial_state,  model, max_steps) :
+
+  action_probs = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
+  values = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
+  rewards = tf.TensorArray(dtype=tf.int32, size=0, dynamic_size=True)
+
+  initial_state_shape = initial_state.shape
+  state = initial_state
+
+  for t in tf.range(max_steps):
+    # Convert state into a batched tensor (batch size = 1)
+    state = tf.expand_dims(state, 0)
+
+    # Run the model and to get action probabilities and critic value
+    action_logits_t, value = model(state)
+
+    # Sample next action from the action probability distribution
+    action = tf.random.categorical(action_logits_t, 1)[0, 0]
+    action_probs_t = tf.nn.softmax(action_logits_t)
+
+    # Store critic values
+    values = values.write(t, tf.squeeze(value))
+
+    # Store log probability of the action chosen
+    action_probs = action_probs.write(t, action_probs_t[0, action])
+
+    # Apply action to the environment to get next state and reward
+    state, reward, done = tf_env_step(action)
+    state.set_shape(initial_state_shape)
+
+    # Store reward
+    rewards = rewards.write(t, reward)
+
+    if tf.cast(done, tf.bool):
+      break
+
+  action_probs = action_probs.stack()
+  values = values.stack()
+  rewards = rewards.stack()
+
+  return action_probs, values, rewards
 
 
 
