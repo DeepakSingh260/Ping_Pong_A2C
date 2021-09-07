@@ -275,8 +275,8 @@ num_hidden_units = 128
 modelA = Actor_Critic_A(num_actions, num_hidden_units)
 modelB = Actor_Critic_A(num_actions , num_hidden_units)
 
-def env_step(action: np.ndarray ,s) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-  """Returns state, reward and done flag given an action."""
+def env_step(action: np.ndarray ,s):
+	"""Returns state, reward and done flag given an action."""
 
 	state, reward, done, _ = py_env.step(action,s)
 	return (state.astype(np.float32), np.array(reward, np.int32), np.array(done, np.int32))
@@ -288,45 +288,74 @@ def tf_env_step(action: tf.Tensor ,s) -> List[tf.Tensor]:
 
 def run_episode(initial_state,  modelA , modelB, max_steps , s) :
 
-	action_probs = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
-	values = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
-	rewards = tf.TensorArray(dtype=tf.int32, size=0, dynamic_size=True)
+	action_probs_a = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
+	values_a = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
+	rewards_a = tf.TensorArray(dtype=tf.int32, size=0, dynamic_size=True)
+	action_probs_b = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
+	values_b = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
+	rewards_b = tf.TensorArray(dtype=tf.int32, size=0, dynamic_size=True)
 
-	initial_state_shape = initial_state.shape
-	state = initial_state
+
+	initial_state_shape_a = initial_state_a.shape
+	state_a = initial_state_a
+	initial_state_shape_b = initial_state_b.shape
+	state_b = initial_state_b
 
 	for t in tf.range(max_steps):
 		# Convert state into a batched tensor (batch size = 1)
-		state = tf.expand_dims(state, 0)
+		state_a = tf.expand_dims(state_a, 0)
 
 		# Run the model and to get action probabilities and critic value
-		action_logits_t_a, value_a = modelA(state)
+		action_logits_t_a, value_a = modelA(state_a)
+
+		state_b = tf.expand_dims(state_b, 0)
+		action_logits_t_b, value_b = modelB(state_b)
 
 		# Sample next action from the action probability distribution
 		action_a = tf.random.categorical(action_logits_t_a, 1)[0, 0]
-		action_probs_t = tf.nn.softmax(action_logits_t_a)
+		action_probs_t_a = tf.nn.softmax(action_logits_t_a)
+
+		action_b = tf.random.categorical(action_logits_t_b, 1)[0, 0]
+		action_probs_t_b = tf.nn.softmax(action_logits_t_b)
 
 		# Store critic values
-		values = values.write(t, tf.squeeze(value))
+		values_a = values_a.write(t, tf.squeeze(value_a))
 
 		# Store log probability of the action chosen
-		action_probs = action_probs.write(t, action_probs_t[0, action])
+		action_probs_a = action_probs_a.write(t, action_probs_t_a[0, action])
+
+		# Store critic values
+		values_b = values_b.write(t, tf.squeeze(value_b))
+
+		# Store log probability of the action chosen
+		action_probs_b = action_probs_b.write(t, action_probs_t_b[0, action])
 
 		# Apply action to the environment to get next state and reward
-		state, reward, done = tf_env_step(action,s)
-		state.set_shape(initial_state_shape)
+		state_a, reward_a, done_a = tf_env_step(action_a,'a')
+		state_a.set_shape(initial_state_shape_a)
+
+		state_b, reward_b, done_b = tf_env_step(action_b,'b')
+		state_b.set_shape(initial_state_shape_b)
 
 		# Store reward
-		rewards = rewards.write(t, reward)
+		rewards_a = rewards_a.write(t, reward_a)
+		rewards_b = rewards_b.write(t, reward_b)
 
-		if tf.cast(done, tf.bool):
+		if tf.cast(done_a, tf.bool):
+			break
+		if tf.cast(done_b, tf.bool):
 			break
 
-	action_probs = action_probs.stack()
-	values = values.stack()
-	rewards = rewards.stack()
+	action_probs_a = action_probs_a.stack()
+	values_a = values_a.stack()
+	rewards_a = rewards_a.stack()
 
-	return action_probs, values, rewards
+	action_probs_b = action_probs_b.stack()
+	values_b = values_b.stack()
+	rewards_b = rewards_b.stack()
+
+	return action_probs_a, values_a, rewards_a ,action_probs_b, values_b, rewards_b
+
 optimizer = tf.keras.optimizers.Adam(learning_rate=0.01)
 def get_expected_return(rewards, gamma, standardize = True ):
 	"""Compute expected returns per timestep."""
@@ -364,32 +393,40 @@ def compute_loss(action_probs,  values,returns):
 	return actor_loss + critic_loss
 
 @tf.function
-def train_step(initial_state, modelA , modelB, optimizer, gamma, max_steps_per_episode):
+def train_step(initial_state_a,initial_state_b, modelA , modelB, optimizer, gamma, max_steps_per_episode):
   """Runs a model training step."""
 
 	with tf.GradientTape() as tape:
 
 		# Run the model for one episode to collect training data
-		action_probs, values, rewards = run_episode(initial_state, modelA ,modelB, max_steps_per_episode) 
+		action_probs_a, values_a, rewards_a ,action_probs_b, values_b, rewards_b = run_episode(initial_state_a , initial_state_b, modelA ,modelB, max_steps_per_episode) 
 
 		# Calculate expected returns
-		returns = get_expected_return(rewards, gamma)
+		returns_a = get_expected_return(rewards_a, gamma)
+		returns_b = get_expected_return(rewards_b, gamma)
 
 		# Convert training data to appropriate TF tensor shapes
 		action_probs, values, returns = [ tf.expand_dims(x, 1) for x in [action_probs, values, returns]] 
 
 		# Calculating loss values to update our network
-		loss = compute_loss(action_probs, values, returns)
+		loss_a = compute_loss(action_probs_a, values_a, returns_a)
+		loss_b = compute_loss(action_probs_b, values_b, returns_b)
 
 		# Compute the gradients from the loss
-	grads = tape.gradient(loss, model.trainable_variables)
+	grads_a = tape.gradient(loss_a, modelA.trainable_variables)
 
 	# Apply the gradients to the model's parameters
-	optimizer.apply_gradients(zip(grads, model.trainable_variables))
+	optimizer.apply_gradients(zip(grads_a, modelA.trainable_variables))
 
-	episode_reward = tf.math.reduce_sum(rewards)
+	grads_b = tape.gradient(loss_b, modelA.trainable_variables)
 
-	return episode_reward
+	# Apply the gradients to the model's parameters
+	optimizer.apply_gradients(zip(grads_b, modelB.trainable_variables))
+
+	episode_reward_a = tf.math.reduce_sum(rewards_a)
+	episode_reward_b = tf.math.reduce_sum(rewards_b)
+
+	return episode_reward_a ,episode_reward_b
 
 
 
@@ -408,26 +445,33 @@ running_reward = 0
 gamma = 0.99
 
 # Keep last episodes reward
-episodes_reward: collections.deque = collections.deque(maxlen=min_episodes_criterion)
+episodes_rewardA: collections.deque = collections.deque(maxlen=min_episodes_criterion)
+episodes_rewardB: collections.deque = collections.deque(maxlen=min_episodes_criterion)
 
 with tqdm.trange(max_episodes) as t:
 	for i in t:
-	initial_state = tf.constant(env.reset(), dtype=tf.float32)
-	episode_reward = int(train_step(
-	    initial_state, modelA , modelB, optimizer, gamma, max_steps_per_episode))
+		initial_state_a = tf.constant(env.reset('a'), dtype=tf.float32)
+		initial_state_b = tf.constant(env.reset('b'), dtype=tf.float32)
 
-	episodes_reward.append(episode_reward)
-	running_reward = statistics.mean(episodes_reward)
+		episode_reward_a , episode_reward_b = int(train_step(
+		    initial_state_a,initial_state_b, modelA , modelB, optimizer, gamma, max_steps_per_episode))
 
-	t.set_description(f'Episode {i}')
-	t.set_postfix(episode_reward=episode_reward, running_reward=running_reward)
+		episodes_rewardA.append(episode_reward_a)
+		running_reward_a = statistics.mean(episodes_rewardA)
+		episodes_rewardB.append(episode_reward_b)
+		running_reward_B = statistics.mean(episodes_rewardB)
 
-	# Show average episode reward every 10 episodes
-	if i % 10 == 0:
-		pass # print(f'Episode {i}: average reward: {avg_reward}')
+		t.set_description(f'Episode {i}')
+		t.set_postfix(episode_reward=episode_rewardA, running_reward=running_reward_a)
+		t.set_postfix(episode_reward=episode_rewardB, running_reward=running_reward_b)
 
-	if running_reward > reward_threshold and i >= min_episodes_criterion:  
-		break
+		# Show average episode reward every 10 episodes
+		if i % 10 == 0:
+			pass # print(f'Episode {i}: average reward: {avg_reward}')
+
+		if running_reward_a > reward_threshold and running_reward_a > reward_threshold and i >= min_episodes_criterion:  
+			break
+
 
 print(f'\nSolved at episode {i}: average reward: {running_reward:.2f}!')
 
