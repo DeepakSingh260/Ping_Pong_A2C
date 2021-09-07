@@ -2,6 +2,10 @@ import pygame
 import numpy as np 
 import time 
 import tensorflow as tf
+import statistics
+import tqdm
+import abc
+import collections
 from tf_agents.specs import array_spec , tensor_spec
 from tf_agents.trajectories import time_step as ts 
 from tf_agents.environments import tf_py_environment
@@ -172,7 +176,7 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 		self.paddle_a.draw(win)
 		self.paddle_b.draw(win)
 
-	def _reset(self , s):
+	def Reset(self , s):
 		self.ball = None 
 		self.ball = Ball()
 		self.paddle_a = PaddleA()
@@ -186,6 +190,10 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 			self._current_time_step = ts.restart(np.array([self.paddle_b.y ,self.paddle_b.x- self.ball.x ,self.paddle_b.y-self.ball.y] ,dtype = np.int32 ))
 
 		return self._current_time_step
+
+	def _reset(self):
+		"""Return initial_time_step."""
+		pass
 
 	def _step(self,action ,s):
 
@@ -282,7 +290,7 @@ def env_step(action: np.ndarray ,s):
 	return (state.astype(np.float32), np.array(reward, np.int32), np.array(done, np.int32))
 
 
-def tf_env_step(action: tf.Tensor ,s) -> List[tf.Tensor]:
+def tf_env_step(action: tf.Tensor ,s):
 
 	return tf.numpy_function(env_step, [action , s], [tf.float32, tf.int32, tf.int32])
 
@@ -381,7 +389,7 @@ def get_expected_return(rewards, gamma, standardize = True ):
 	return returns
 
 def compute_loss(action_probs,  values,returns):
-  """Computes the combined actor-critic loss."""
+	"""Computes the combined actor-critic loss."""
 
 	advantage = returns - values
 
@@ -394,7 +402,7 @@ def compute_loss(action_probs,  values,returns):
 
 @tf.function
 def train_step(initial_state_a,initial_state_b, modelA , modelB, optimizer, gamma, max_steps_per_episode):
-  """Runs a model training step."""
+	"""Runs a model training step."""
 
 	with tf.GradientTape() as tape:
 
@@ -450,8 +458,8 @@ episodes_rewardB: collections.deque = collections.deque(maxlen=min_episodes_crit
 
 with tqdm.trange(max_episodes) as t:
 	for i in t:
-		initial_state_a = tf.constant(env.reset('a'), dtype=tf.float32)
-		initial_state_b = tf.constant(env.reset('b'), dtype=tf.float32)
+		initial_state_a = tf.constant(py_env.Reset('a'), dtype=tf.float32)
+		initial_state_b = tf.constant(py_env.Reset('b'), dtype=tf.float32)
 
 		episode_reward_a , episode_reward_b = int(train_step(
 		    initial_state_a,initial_state_b, modelA , modelB, optimizer, gamma, max_steps_per_episode))
