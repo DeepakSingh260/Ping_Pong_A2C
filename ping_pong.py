@@ -176,24 +176,23 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 		self.paddle_a.draw(win)
 		self.paddle_b.draw(win)
 
-	def Reset(self , s):
+	def _reset(self , s):
 		self.ball = None 
 		self.ball = Ball()
 		self.paddle_a = PaddleA()
 
 		self.paddle_b = PaddleB()
 
+		# numpy_function
+
 		if s== 'a':
-			self._current_time_step = ts.restart(np.array([self.paddle_a.y ,self.paddle_a.x- self.ball.x ,self.paddle_a.y-self.ball.y] ,dtype = np.int32 ))
+			state , reward , done = np.array([self.paddle_a.y ,self.paddle_a.x- self.ball.x ,self.paddle_a.y-self.ball.y],dtype = np.int32),0,0
 
 		if s=='b':
-			self._current_time_step = ts.restart(np.array([self.paddle_b.y ,self.paddle_b.x- self.ball.x ,self.paddle_b.y-self.ball.y] ,dtype = np.int32 ))
+			state , reward , done = np.array([self.paddle_b.y ,self.paddle_b.x- self.ball.x ,self.paddle_b.y-self.ball.y] ,dtype = np.int32), 0 ,0
 
-		return self._current_time_step
+		return state , reward , done
 
-	def _reset(self):
-		"""Return initial_time_step."""
-		pass
 
 	def _step(self,action ,s):
 
@@ -257,7 +256,7 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 
 
 py_env = Ping_Pong_Env('a')
-py_env= tf_py_environment.TFPyEnvironment(py_env)
+# py_env= tf_py_environment.TFPyEnvironment(py_env)
 
 
 
@@ -286,13 +285,25 @@ modelB = Actor_Critic_A(num_actions , num_hidden_units)
 def env_step(action: np.ndarray ,s):
 	"""Returns state, reward and done flag given an action."""
 
-	state, reward, done, _ = py_env.step(action,s)
+	state, reward, done = py_env.step(action,s)
 	return (state.astype(np.float32), np.array(reward, np.int32), np.array(done, np.int32))
 
 
 def tf_env_step(action: tf.Tensor ,s):
-
+	print('tf.numpy_function(env_step, [action , s], [tf.float32, tf.int32, tf.int32])',tf.numpy_function(env_step, [action , s], [tf.float32, tf.int32, tf.int32]))
 	return tf.numpy_function(env_step, [action , s], [tf.float32, tf.int32, tf.int32])
+
+def env_reset(s):
+	state , reward , done = py_env._reset(s)
+	return (state.astype(np.int32), np.array(reward, np.int32), np.array(done, np.int32))
+
+def tf_env_reset(s):
+	# print('tf.numpy_function(/, [action , s], [tf.float32, tf.int32, tf.int32])',tf.numpy_function(env_reset, [ s], [tf.float32, tf.int32, tf.int32]))
+	print(env_reset(s))
+	state , reward , done = env_reset(s)
+	# return tf.numpy_function(env_reset,[s], [tf.int32, tf.int32, tf.int32])
+	return [state , reward , done]
+
 
 def run_episode(initial_state,  modelA , modelB, max_steps , s) :
 
@@ -458,8 +469,8 @@ episodes_rewardB: collections.deque = collections.deque(maxlen=min_episodes_crit
 
 with tqdm.trange(max_episodes) as t:
 	for i in t:
-		initial_state_a = tf.constant(py_env.Reset('a'), dtype=tf.float32)
-		initial_state_b = tf.constant(py_env.Reset('b'), dtype=tf.float32)
+		initial_state_a = tf.ragged.constant(tf_env_reset('a'), dtype=tf.float32)
+		initial_state_b = tf.ragged.constant(tf_env_reset('b'), dtype=tf.float32)
 
 		episode_reward_a , episode_reward_b = int(train_step(
 		    initial_state_a,initial_state_b, modelA , modelB, optimizer, gamma, max_steps_per_episode))
