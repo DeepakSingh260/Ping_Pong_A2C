@@ -11,6 +11,7 @@ from tf_agents.trajectories import time_step as ts
 from tf_agents.environments import tf_py_environment
 from tensorflow.keras import layers
 from tf_agents.environments import py_environment
+eps = np.finfo(np.float32).eps.item()
 WIN = pygame.display.set_mode((600,800))
 pygame.font.init()
 STAT_FONT = pygame.font.SysFont("comicsans" , 50)
@@ -195,7 +196,8 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 
 
 	def _step(self,action ,s):
-
+		action = tf.cast(action, tf.float32)
+		print('action' , action , 's' , s)
 		if s == 'a':
 
 			if action <0.5:
@@ -217,33 +219,33 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 
 		if s == 'a' and self.ball.reset == True:
 			self.ball.reset = False
-			self._current_time_step = ts.termination(np.array([self.paddle_a.y ,self.paddle_a.x- self.ball.x ,self.paddle_a.y-self.ball.y] , dtype = np.int32 ) , reward = -1000 )
+			state , rewrard , done  = np.array([self.paddle_a.y ,self.paddle_a.x- self.ball.x ,self.paddle_a.y-self.ball.y] , dtype = np.int32 ) , -1000 ,True
 			self._reset(s)
-			return self._current_time_step
+			return state . reward ,done 
 
 		if s == 'b' and self.ball.reset == True:
 
 			self.ball.reset = False
-			self._current_time_step = ts.termination(np.array([self.paddle_b.y ,self.paddle_b.x- self.ball.x ,self.paddle_b.y-self.ball.y] , dtype = np.int32 ) , reward = -1000 )
+			state , rewrard , done  = np.array([self.paddle_b.y ,self.paddle_b.x- self.ball.x ,self.paddle_b.y-self.ball.y] , dtype = np.int32 ) ,-1000 ,True
 			self._reset(s)
-			return self._current_time_step
+			return state , rewrard , done 
 
-		if s == 'a' and  (self.ball.x  -50 <= self.paddle_a.x and self.ball.y >= self.paddle_a.y and self.ball.y <= self.paddle_a.y+100) :
+		if s == 'a' and  (self.ball.x - 50 <= self.paddle_a.x and self.ball.y >= self.paddle_a.y and self.ball.y <= self.paddle_a.y+100) :
 			 
-			self._current_time_step = ts.transition(np.array([self.paddle_a.y ,self.paddle_a.x- self.ball.x ,self.paddle_a.y-self.ball.y] , dtype = np.int32) , reward = 1000, discount = 1)
+			state , rewrard , done  = np.array([self.paddle_a.y ,self.paddle_a.x- self.ball.x ,self.paddle_a.y-self.ball.y] , dtype = np.int32) , 1000, False
 
 		elif s == 'a' :
- 			self._current_time_step = ts.transition(np.array([self.paddle_a.y ,self.paddle_a.x- self.ball.x ,self.paddle_a.y-self.ball.y] , dtype = np.int32) , reward = 1, discount = 1)
+ 			state , rewrard , done = np.array([self.paddle_a.y ,self.paddle_a.x- self.ball.x ,self.paddle_a.y-self.ball.y] , dtype = np.int32) , 1,  False
 
 		elif s=='b' and (self.ball.x + 25 >= self.paddle_b.x and self.ball.y >= self.paddle_b.y and self.ball.y <= self.paddle_b.y+100):
 
-			self._current_time_step = ts.transition(np.array([self.paddle_b.y ,self.paddle_b.x- self.ball.x ,self.paddle_b.y-self.ball.y] , dtype = np.int32) , reward = 1000, discount = 1)
+			state , rewrard , done  = np.array([self.paddle_b.y ,self.paddle_b.x- self.ball.x ,self.paddle_b.y-self.ball.y] , dtype = np.int32) ,1000, False
 
 		elif s == 'b' :
- 			self._current_time_step = ts.transition(np.array([self.paddle_b.y ,self.paddle_b.x- self.ball.x ,self.paddle_b.y-self.ball.y] , dtype = np.int32) , reward = 1, discount = 1)
+ 			state , rewrard , done  = np.array([self.paddle_b.y ,self.paddle_b.x- self.ball.x ,self.paddle_b.y-self.ball.y] , dtype = np.int32) , 1, False
 
 
-		return self._current_time_step
+		return 	 state, rewrard , done 
 
 
 	def action_spec(self):
@@ -264,14 +266,17 @@ class Actor_Critic_A(tf.keras.Model):
 
 	def __init__(self , num_actions , num_hidden_units):
 
-		super().__init__()
+		super().__init__()	
+		# self.Input  = tf.keras.layers.InputLayer(input_shape=(3,3))
+		# self.Flatten = tf.keras.layers.Flatten()
 
 		self.common = layers.Dense(num_hidden_units ,activation = 'relu')
 		self.actor = layers.Dense(num_actions , activation = 'softmax')
 		self.critic = layers.Dense(1)
 
 	def call(self,inputs):
-
+		# inputs = self.Input(inputs)
+		# inputs = self.Flatten(inputs)
 		x = self.common(inputs)
 		return self.actor(x) , self.critic(x)
 
@@ -282,30 +287,31 @@ num_hidden_units = 128
 modelA = Actor_Critic_A(num_actions, num_hidden_units)
 modelB = Actor_Critic_A(num_actions , num_hidden_units)
 
-def env_step(action: np.ndarray ,s):
+def env_step(action ,s):
 	"""Returns state, reward and done flag given an action."""
 
-	state, reward, done = py_env.step(action,s)
+	state, reward, done = py_env._step(action,s)
 	return (state.astype(np.float32), np.array(reward, np.int32), np.array(done, np.int32))
 
 
-def tf_env_step(action: tf.Tensor ,s):
-	print('tf.numpy_function(env_step, [action , s], [tf.float32, tf.int32, tf.int32])',tf.numpy_function(env_step, [action , s], [tf.float32, tf.int32, tf.int32]))
+def tf_env_step(action ,s):
+	# print('tf.numpy_function(env_step, [action , s], [tf.float32, tf.int32, tf.int32])',tf.numpy_function(env_step, [action , s], [tf.float32, tf.int32, tf.int32]))
 	return tf.numpy_function(env_step, [action , s], [tf.float32, tf.int32, tf.int32])
 
 def env_reset(s):
 	state , reward , done = py_env._reset(s)
-	return (state.astype(np.int32), np.array(reward, np.int32), np.array(done, np.int32))
+	return (state.astype(np.int32), np.array([reward], np.int32), np.array([done], np.int32))
 
 def tf_env_reset(s):
 	# print('tf.numpy_function(/, [action , s], [tf.float32, tf.int32, tf.int32])',tf.numpy_function(env_reset, [ s], [tf.float32, tf.int32, tf.int32]))
-	print(env_reset(s))
+	# print(env_reset(s))
+
 	state , reward , done = env_reset(s)
-	# return tf.numpy_function(env_reset,[s], [tf.int32, tf.int32, tf.int32])
-	return [state , reward , done]
+	# return tf.numpy_function(env_reset,[s], [tf.int32, tf.int32, tf.bool])
+	return np.array([state])  
 
 
-def run_episode(initial_state,  modelA , modelB, max_steps , s) :
+def run_episode(initial_state_a , initial_state_b,  modelA , modelB, max_steps ) :
 
 	action_probs_a = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
 	values_a = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
@@ -320,41 +326,50 @@ def run_episode(initial_state,  modelA , modelB, max_steps , s) :
 	initial_state_shape_b = initial_state_b.shape
 	state_b = initial_state_b
 
+	print(initial_state_a, 'initial_state_a')
+
 	for t in tf.range(max_steps):
 		# Convert state into a batched tensor (batch size = 1)
+		print('t..............................................',t)
 		state_a = tf.expand_dims(state_a, 0)
+		print('state_a' , state_a.shape)
 
 		# Run the model and to get action probabilities and critic value
 		action_logits_t_a, value_a = modelA(state_a)
 
 		state_b = tf.expand_dims(state_b, 0)
 		action_logits_t_b, value_b = modelB(state_b)
+		print('logit',action_logits_t_a , 'first index' , action_logits_t_a[0])
+		print('logit shape' , action_logits_t_a.shape)
+		if action_logits_t_a.shape == (1,1,2):
+			# print('action_logits_t_a',tf.random.categorical(action_logits_t_a[0],1))
 
-		# Sample next action from the action probability distribution
-		action_a = tf.random.categorical(action_logits_t_a, 1)[0, 0]
-		action_probs_t_a = tf.nn.softmax(action_logits_t_a)
+			# Sample next action from the action probability distribution
+			action_a = tf.random.categorical(action_logits_t_a[0], 1)[0,0]
+			action_probs_t_a = tf.nn.softmax(action_logits_t_a)
+			print('action_probs_t_a' , action_probs_t_a)
 
-		action_b = tf.random.categorical(action_logits_t_b, 1)[0, 0]
-		action_probs_t_b = tf.nn.softmax(action_logits_t_b)
+			action_b = tf.random.categorical(action_logits_t_b[0], 1)[0,0]
+			action_probs_t_b = tf.nn.softmax(action_logits_t_b)
 
 		# Store critic values
 		values_a = values_a.write(t, tf.squeeze(value_a))
 
 		# Store log probability of the action chosen
-		action_probs_a = action_probs_a.write(t, action_probs_t_a[0, action])
+		action_probs_a = action_probs_a.write(t, action_probs_t_a[0, 0])
 
 		# Store critic values
 		values_b = values_b.write(t, tf.squeeze(value_b))
 
 		# Store log probability of the action chosen
-		action_probs_b = action_probs_b.write(t, action_probs_t_b[0, action])
+		action_probs_b = action_probs_b.write(t, action_probs_t_b[0, 0])
 
 		# Apply action to the environment to get next state and reward
 		state_a, reward_a, done_a = tf_env_step(action_a,'a')
-		state_a.set_shape(initial_state_shape_a)
+		# state_a.set_shape(initial_state_shape_a)
 
 		state_b, reward_b, done_b = tf_env_step(action_b,'b')
-		state_b.set_shape(initial_state_shape_b)
+		# state_b.set_shape(initial_state_shape_b)
 
 		# Store reward
 		rewards_a = rewards_a.write(t, reward_a)
@@ -375,7 +390,6 @@ def run_episode(initial_state,  modelA , modelB, max_steps , s) :
 
 	return action_probs_a, values_a, rewards_a ,action_probs_b, values_b, rewards_b
 
-optimizer = tf.keras.optimizers.Adam(learning_rate=0.01)
 def get_expected_return(rewards, gamma, standardize = True ):
 	"""Compute expected returns per timestep."""
 
@@ -398,6 +412,7 @@ def get_expected_return(rewards, gamma, standardize = True ):
 		returns = ((returns - tf.math.reduce_mean(returns)) / (tf.math.reduce_std(returns) + eps))
 
 	return returns
+huber_loss = tf.keras.losses.Huber(reduction=tf.keras.losses.Reduction.SUM)
 
 def compute_loss(action_probs,  values,returns):
 	"""Computes the combined actor-critic loss."""
@@ -411,11 +426,14 @@ def compute_loss(action_probs,  values,returns):
 
 	return actor_loss + critic_loss
 
-@tf.function
+optimizer = tf.keras.optimizers.Adam(learning_rate=0.01)
+
+
+# @tf.function
 def train_step(initial_state_a,initial_state_b, modelA , modelB, optimizer, gamma, max_steps_per_episode):
 	"""Runs a model training step."""
 
-	with tf.GradientTape() as tape:
+	with tf.GradientTape(persistent=True) as tape:
 
 		# Run the model for one episode to collect training data
 		action_probs_a, values_a, rewards_a ,action_probs_b, values_b, rewards_b = run_episode(initial_state_a , initial_state_b, modelA ,modelB, max_steps_per_episode) 
@@ -425,7 +443,8 @@ def train_step(initial_state_a,initial_state_b, modelA , modelB, optimizer, gamm
 		returns_b = get_expected_return(rewards_b, gamma)
 
 		# Convert training data to appropriate TF tensor shapes
-		action_probs, values, returns = [ tf.expand_dims(x, 1) for x in [action_probs, values, returns]] 
+		action_probs_a, values_a, returns_a = [ tf.expand_dims(x, 1) for x in [action_probs_a, values_a, returns_a]] 
+		action_probs_b, values_b, returns_b = [ tf.expand_dims(x, 1) for x in [action_probs_b, values_b, returns_b]] 
 
 		# Calculating loss values to update our network
 		loss_a = compute_loss(action_probs_a, values_a, returns_a)
@@ -433,15 +452,17 @@ def train_step(initial_state_a,initial_state_b, modelA , modelB, optimizer, gamm
 
 		# Compute the gradients from the loss
 	grads_a = tape.gradient(loss_a, modelA.trainable_variables)
-
+	print('returns_b' , returns_b , 'loss_b',loss_b) 
 	# Apply the gradients to the model's parameters
 	optimizer.apply_gradients(zip(grads_a, modelA.trainable_variables))
 
-	grads_b = tape.gradient(loss_b, modelA.trainable_variables)
-
+	grads_b = tape.gradient(loss_b, modelB.trainable_variables)
+	# print('grads_a',grads_a,'grads_b',grads_b)
 	# Apply the gradients to the model's parameters
 	optimizer.apply_gradients(zip(grads_b, modelB.trainable_variables))
 
+	del tape
+	print('rewards_a' , rewards_a)
 	episode_reward_a = tf.math.reduce_sum(rewards_a)
 	episode_reward_b = tf.math.reduce_sum(rewards_b)
 
@@ -467,22 +488,30 @@ gamma = 0.99
 episodes_rewardA: collections.deque = collections.deque(maxlen=min_episodes_criterion)
 episodes_rewardB: collections.deque = collections.deque(maxlen=min_episodes_criterion)
 
+def test_model(modelA , modelB):
+	for _ in range(10):
+		initial_state_a = tf.constant(tf_env_reset('a'))
+		initial_state_b = tf.constant(tf_env_reset('b'))
+
+		
+
+
 with tqdm.trange(max_episodes) as t:
 	for i in t:
-		initial_state_a = tf.ragged.constant(tf_env_reset('a'), dtype=tf.float32)
-		initial_state_b = tf.ragged.constant(tf_env_reset('b'), dtype=tf.float32)
+		initial_state_a = tf.constant(tf_env_reset('a'))
+		initial_state_b = tf.constant(tf_env_reset('b'), dtype=tf.float32)
 
-		episode_reward_a , episode_reward_b = int(train_step(
-		    initial_state_a,initial_state_b, modelA , modelB, optimizer, gamma, max_steps_per_episode))
-
+		episode_reward_a , episode_reward_b = train_step(initial_state_a,initial_state_b, modelA , modelB, optimizer, gamma, max_steps_per_episode)
+		episode_reward_a = int(episode_reward_a)
+		episode_reward_b = int(episode_reward_b)
 		episodes_rewardA.append(episode_reward_a)
 		running_reward_a = statistics.mean(episodes_rewardA)
 		episodes_rewardB.append(episode_reward_b)
-		running_reward_B = statistics.mean(episodes_rewardB)
+		running_reward_b = statistics.mean(episodes_rewardB)
 
 		t.set_description(f'Episode {i}')
-		t.set_postfix(episode_reward=episode_rewardA, running_reward=running_reward_a)
-		t.set_postfix(episode_reward=episode_rewardB, running_reward=running_reward_b)
+		t.set_postfix(episode_reward=episode_reward_a, running_reward=running_reward_a)
+		t.set_postfix(episode_reward=episode_reward_b, running_reward=running_reward_b)
 
 		# Show average episode reward every 10 episodes
 		if i % 10 == 0:
@@ -491,7 +520,7 @@ with tqdm.trange(max_episodes) as t:
 		if running_reward_a > reward_threshold and running_reward_a > reward_threshold and i >= min_episodes_criterion:  
 			break
 
-
+	test_model(modelA , modelB)
 print(f'\nSolved at episode {i}: average reward: {running_reward:.2f}!')
 
 
