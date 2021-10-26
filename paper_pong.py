@@ -161,7 +161,6 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 		self._episode_ended = False
 
 	def render(self):
-		# clock.tick(30)
 		# print('rendering')
 		win = pygame.display.set_mode((600,800))
 		win.fill((0,0,0))
@@ -184,10 +183,10 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 		# numpy_function
 
 		if s== 'a':
-			state , reward , done = np.array([self.paddle_a.y  ,abs(self.paddle_a.y-self.ball.y)],dtype = np.int32),0,0
+			state , reward , done = np.array([self.paddle_a.y,abs(self.paddle_a.x- self.ball.x )  ,self.paddle_a.y-self.ball.y],dtype = np.int32),0,0
 
 		if s=='b':
-			state , reward , done = np.array([self.paddle_b.y ,abs(self.paddle_b.y-self.ball.y)] ,dtype = np.int32), 0 ,0
+			state , reward , done = np.array([self.paddle_b.y ,abs(self.paddle_b.x- self.ball.x) ,self.paddle_b.y-self.ball.y] ,dtype = np.int32), 0 ,0
 
 		return state , reward , done
 
@@ -198,11 +197,11 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 		self.ball.move(self.paddle_a  ,self.paddle_b)
 		if s == 'a':
 
-			if action ==2:
+			if action ==1:
 				# print('a>0.5.......................................................................')
 				self.paddle_a.move(100)
 
-			elif action ==1:
+			elif action ==2:
 				self.paddle_a.move(0)
 
 			elif action == 0:
@@ -212,13 +211,13 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 
 		if s == 'b':
 
-			if action ==2:
+			if action ==1:
 				# print('b>0.5.......................................................................')
 
 				self.paddle_b.move(100)
 
 
-			elif action == 1:
+			elif action == 2:
 				self.paddle_b.move(0)
 			elif action == 0:
 				# print('b<0.5.......................................................................')
@@ -229,31 +228,31 @@ class Ping_Pong_Env(py_environment.PyEnvironment):
 	
 
 		if  self.ball.reset_a == True:
-			self.ball.reset_b = False
-			state , rewrard , done  = np.array([self.paddle_a.y  ,abs(self.paddle_a.y-self.ball.y)] , dtype = np.int32 ) , -1000,True
+			self.ball.reset_a = False
+			state , rewrard , done  = np.array([self.paddle_a.y ,abs(self.paddle_a.x- self.ball.x ) ,self.paddle_a.y-self.ball.y] , dtype = np.int32 ) , -((abs(self.paddle_a.x- self.ball.x)*abs(self.paddle_a.y-self.ball.y))//10 ),True
 			# self._reset(s)
 			return state , rewrard ,done 
 
 		if self.ball.reset_b == True:
 
 			self.ball.reset_b = False
-			state , rewrard , done  = np.array([self.paddle_b.y ,abs(self.paddle_b.y-self.ball.y)] , dtype = np.int32 ) ,-1000,True
+			state , rewrard , done  = np.array([self.paddle_b.y,abs(self.paddle_b.x- self.ball.x) ,self.paddle_b.y-self.ball.y] , dtype = np.int32 ) ,-((abs(self.paddle_b.x- self.ball.x)*abs(self.paddle_b.y-self.ball.y)) //10),True
 			# self._reset(s)
 			return state , rewrard , done 
 
 		if s == 'a' and  (self.ball.x - 50 <= self.paddle_a.x and self.ball.y >= self.paddle_a.y and self.ball.y <= self.paddle_a.y+100) :
 			 
-			state , rewrard , done  = np.array([self.paddle_a.y  ,abs(self.paddle_a.y-self.ball.y)] , dtype = np.int32) , 1000, False
+			state , rewrard , done  = np.array([self.paddle_a.y ,abs(self.paddle_a.x- self.ball.x ) ,self.paddle_a.y-self.ball.y] , dtype = np.int32) , 1000, False
 
 		elif s == 'a' :
- 			state , rewrard , done = np.array([self.paddle_a.y ,abs(self.paddle_a.y-self.ball.y)] , dtype = np.int32) , -1, False
+ 			state , rewrard , done = np.array([self.paddle_a.y,abs(self.paddle_a.x- self.ball.x ) ,self.paddle_a.y-self.ball.y] , dtype = np.int32) , 0, False
 
 		elif s=='b' and (self.ball.x + 25 >= self.paddle_b.x and self.ball.y >= self.paddle_b.y and self.ball.y <= self.paddle_b.y+100):
 
-			state , rewrard , done  = np.array([self.paddle_b.y ,abs(self.paddle_b.y-self.ball.y)] , dtype = np.int32) ,1000, False
+			state , rewrard , done  = np.array([self.paddle_b.y,abs(self.paddle_b.x- self.ball.x) ,self.paddle_b.y-self.ball.y] , dtype = np.int32) ,1000, False
 
 		elif s == 'b' :
- 			state , rewrard , done  = np.array([self.paddle_b.y ,abs(self.paddle_b.y-self.ball.y)] , dtype = np.int32) , -1, False
+ 			state , rewrard , done  = np.array([self.paddle_b.y,abs(self.paddle_b.x- self.ball.x) ,self.paddle_b.y-self.ball.y] , dtype = np.int32) , 0, False
 
 
 		return 	 state, rewrard , done 
@@ -279,18 +278,20 @@ class Actor_Critic_A(tf.keras.Model):
 		# self.Input  = tf.keras.layers.InputLayer(input_shape=(3,3))
 		# self.Flatten = tf.keras.layers.Flatten()
 
-		self.common = layers.Dense(num_hidden_units ,activation = 'relu')
-		self.actor = layers.Dense(num_actions , activation = 'softmax')
-		self.critic = layers.Dense(1)
+		self.common = layers.Dense(1024 ,activation = 'relu')
+		self.common1= layers.Dense(num_hidden_units ,activation = 'relu')
+		self.actor = layers.Dense(num_actions ,activation = "tanh")
+		self.critic = layers.Dense(1 )
 
 	def call(self,inputs):
 		# inputs = self.Input(inputs)
 		# inputs = self.Flatten(inputs)
 		x = self.common(inputs)
-		return self.actor(x) , self.critic(x)
+		x1 =self.common1(inputs)
+		return self.actor(x) , self.critic(x1)
 
 
-num_actions = 3
+num_actions = 2
 num_hidden_units = 32
 
 model = Actor_Critic_A(num_actions, num_hidden_units)
@@ -321,104 +322,135 @@ def run_episode(initial_state_a , initial_state_b,  model, max_steps ) :
 	action_probsB = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
 	valuesB = tf.TensorArray(dtype=tf.float32, size=0, dynamic_size=True)
 	rewardsB = tf.TensorArray(dtype=tf.int32, size=0, dynamic_size=True)
+	vA = []
+	vB = []
+	aA = []
+	aB = []
+	rA = []
+	rB = []
 
 
-	initial_state_shape_a = initial_state_a.shape
-	state_a = initial_state_a
-	initial_state_shape_b = initial_state_b.shape
-	state_b = initial_state_b
+	for _ in range(10):
+		initial_state_a = tf.constant(tf_env_reset('a'))
+		initial_state_b = tf.constant(tf_env_reset('b'))
 
-	# print(initial_state_a, 'initial_state_a')
-	First_Bool = False
-	Second_Bool  = False
+		initial_state_shape_a = initial_state_a.shape
+		state_a = initial_state_a
+		initial_state_shape_b = initial_state_b.shape
+		state_b = initial_state_b
 
-	t = 0
+		print(initial_state_a, 'initial_state_a')
+		First_Bool = False
+		Second_Bool  = False
 
-	for _ in tf.range(max_steps):
+		t = 0
+
 		
-		state_a = tf.expand_dims(state_a, 0)
-
-		action_logits_t_a, value_a = model(state_a)
-
-		state_b = tf.expand_dims(state_b, 0)
-		action_logits_t_b, value_b = model(state_b)
-		if action_logits_t_a.shape == (1,1,3):
-			action_a = tf.random.categorical(action_logits_t_a[0], 1)[0,0]
-
-			action_probs_t_a = tf.nn.softmax(action_logits_t_a[0])
-
-			action_b = tf.random.categorical(action_logits_t_b[0], 1 )[0,0]
-			action_probs_t_b = tf.nn.softmax(action_logits_t_b[0])
-
-		else:
-			action_a = tf.random.categorical(action_logits_t_a, 1)[0,0]
-			action_probs_t_a = tf.nn.softmax(action_logits_t_a)
-			action_b = tf.random.categorical(action_logits_t_b, 1)[0,0]
-			action_probs_t_b = tf.nn.softmax(action_logits_t_b)
 
 
-		valuesA = valuesA.write(t, tf.squeeze(value_a))
-		action_probsA = action_probsA.write(t, action_probs_t_a[0, action_a])
-		valuesB = valuesB.write(t, tf.squeeze(value_b))
 
-		action_probsB = action_probsB.write(t, action_probs_t_b[0, action_b])
-
-		state_a, reward_a, done_a = tf_env_step(action_a,'a')
-
-		if tf.cast(done_a,tf.bool) :
-			First_Bool = True
-
-		py_env.render()
-		pygame.display.update()
-
-		state_b, reward_b, done_b = tf_env_step(action_b,'b')
-		py_env.render()
-		if tf.cast(done_b,tf.bool) :
-			Second_Bool = True
-		pygame.display.update()
-		
-		rewardsA = rewardsA.write(t, reward_a)
-		rewardsB = rewardsB.write(t, reward_b)
-
-		if First_Bool and Second_Bool:
+		for _ in tf.range(max_steps):
 			
-			First_Bool = False
-			Second_Bool = False
-			break
-		
-		t+=1
+			state_a = tf.expand_dims(state_a, 0)
 
-	# index = 0 
-	# for i in action_probsB:
-	# 	action_probsA = action_probsA.write(t+index ,i)
+			action_logits_t_a, value_a = model(state_a)
 
-	# index = 0
-	# for i in valuesB:
-	# 	valuesA = valuesA.write(t+index ,i)
+			state_b = tf.expand_dims(state_b, 0)
+			action_logits_t_b, value_b = model(state_b)
+			if action_logits_t_a.shape == (1,1,2):
+				action_a = tf.random.categorical(action_logits_t_a[0], 1)[0,0]
+
+				action_probs_t_a = tf.nn.softmax(action_logits_t_a[0])
+
+				action_b = tf.random.categorical(action_logits_t_b[0], 1 )[0,0]
+				action_probs_t_b = tf.nn.softmax(action_logits_t_b[0])
+
+			else:
+				action_a = tf.random.categorical(action_logits_t_a, 1)[0,0]
+				action_probs_t_a = tf.nn.softmax(action_logits_t_a)
+				action_b = tf.random.categorical(action_logits_t_b, 1)[0,0]
+				action_probs_t_b = tf.nn.softmax(action_logits_t_b)
 
 
-	# index = 0
-	# for i in rewardsB:
-	# 	rewardsA = rewardsA.write(t+index ,i)
+			vA.append(tf.squeeze(value_a))
+			aA.append(action_probs_t_a[0, action_a])
+			vB.append(tf.squeeze(value_b))
 
+			aB.append(action_probs_t_b[0, action_b])
+
+			state_a, reward_a, done_a = tf_env_step(action_a,'a')
+
+			if tf.cast(done_a,tf.bool) :
+				First_Bool = True
+
+			py_env.render()
+			pygame.display.update()
+
+			state_b, reward_b, done_b = tf_env_step(action_b,'b')
+			py_env.render()
+			if tf.cast(done_b,tf.bool) :
+				Second_Bool = True
+			pygame.display.update()
+			
+			rA.append(reward_a)
+			rB.append(reward_b)
+
+			if First_Bool or Second_Bool:
+				
+				First_Bool = False
+				Second_Bool = False
+				break
+			
+			t+=1
+	# print('aA' , len(aA))
+	# print('aB' , len(aB))
+	# print('vA' , len(vA))
+	# print('vb' , len(vB))
+	# print('rA' , len(rA))
+	# print('rB' , len(rB))
+	index = 0
+	for i in aA:
+		action_probsA = action_probsA.write(index , i) 
+		index+=1
+	for i in aB:
+		action_probsA = action_probsA.write(index ,i)
+		index+=1
+	index = 0
+
+	for i in vA:
+		valuesA = valuesA.write(index , i)
+		index+=1
+	for i in vB:
+		valuesA = valuesA.write(index ,i)
+		index+=1
+
+	index = 0
+	for i in rA:
+		rewardsA = rewardsA.write(index , i)
+		index+=1
+	for i in rB:
+		rewardsA = rewardsA.write(index ,i)
+		index+=1
 
 	# tf.concat( [action_probsA,action_probsB],0)
 	# tf.concat( [valuesA,valuesB])
 
 	# rewardsA = tf.concat([rewardsA , rewardsB] ,1)
-	print('action_probsA' , action_probsA)
-	print('valuesA' , valuesA)
-	print('rewardsA' , rewardsA)
+	
 	action_probsA = action_probsA.stack()
 	valuesA = valuesA.stack()
 	rewardsA = rewardsA.stack()
 
 	action_probsB = action_probsB.stack()
-	print('action_probsb' , action_probsB)
+	# print('action_probsb' , action_probsB)
 	valuesB = valuesB.stack()
 	rewardsB = rewardsB.stack()
 
-	return action_probsA, valuesA, rewardsA , action_probsB , valuesB , rewardsB
+	# print('action_probsA' , action_probsA)
+	# print('valuesA' , valuesA)
+	# print('rewardsA' , rewardsA)
+
+	return action_probsA, valuesA, rewardsA , action_probsA , valuesA , rewardsA
 
 
 def get_expected_return(rewards, gamma, standardize = True ):
@@ -458,7 +490,7 @@ def compute_loss(action_probs,  values,returns):
 
 	return actor_loss + critic_loss
 
-optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
+optimizer = tf.keras.optimizers.Adam(learning_rate=0.000026)
 
 
 # @tf.function
@@ -472,17 +504,17 @@ def train_step(initial_state_a,initial_state_b, model , optimizer, gamma, max_st
 
 		# Calculate expected returns
 		returnsA = get_expected_return(rewardsA, gamma)
-		returnsB = get_expected_return(rewardsB, gamma)
+		# returnsB = get_expected_return(rewardsB, gamma)
 
 		# Convert training data to appropriate TF tensor shapes
 		action_probsA, valuesA, returnsA = [ tf.expand_dims(x, 1) for x in [action_probsA, valuesA, returnsA]] 
-		action_probsB, valuesB, returnsB = [ tf.expand_dims(x, 1) for x in [action_probsB, valuesB, returnsB]] 
+		# action_probsB, valuesB, returnsB = [ tf.expand_dims(x, 1) for x in [action_probsB, valuesB, returnsB]] 
 
 		# Calculating loss values to update our network
 		lossA = compute_loss(action_probsA, valuesA, returnsA)
 		print('loss' , lossA)
-		lossB = compute_loss(action_probsB, valuesB, returnsB)
-		print('lossB'  , lossB)
+		# lossB = compute_loss(action_probsB, valuesB, returnsB)
+		# print('lossB'  , lossB)
 
 		# Compute the gradients from the loss
 	grads = tape.gradient(lossA, model.trainable_variables)
@@ -490,10 +522,10 @@ def train_step(initial_state_a,initial_state_b, model , optimizer, gamma, max_st
 	# Apply the gradients to the model's parameters
 	optimizer.apply_gradients(zip(grads, model.trainable_variables))
 
-	grads_b = tape.gradient(lossB, model.trainable_variables)
-	# # print('grads_a',grads_a,'grads_b',grads_b)
-	# # Apply the gradients to the model's parameters
-	optimizer.apply_gradients(zip(grads_b, model.trainable_variables))
+	# grads_b = tape.gradient(lossB, model.trainable_variables)
+	# # # print('grads_a',grads_a,'grads_b',grads_b)
+	# # # Apply the gradients to the model's parameters
+	# optimizer.apply_gradients(zip(grads_b, model.trainable_variables))
 
 	del tape
 	# print('rewards_a' , rewards_a)
@@ -531,11 +563,13 @@ def test_model(model):
 		done_a_a = False
 		done_b_b = False
 		while not done:
+			clock.tick(30)
+
 			state_a = tf.expand_dims(state_a, 0)
 			state_b = tf.expand_dims(state_b, 0)
 			action_logits_t_a,_ = model(state_a)
 			action_logits_t_b,_ = model(state_b) 
-			if action_logits_t_a.shape == (1,1,3):
+			if action_logits_t_a.shape == (1,1,2):
 				# action_a = tf.random.categorical(action_logits_t_a[0], 1)[0,0]
 				action_a = np.argmax(np.squeeze(action_logits_t_a[0]))
 				action_probs_t_a = tf.nn.softmax(action_logits_t_a[0])
@@ -568,7 +602,7 @@ def test_model(model):
 			if reward_b>1:
 				print('good job paddle_b...........................................................................')
 				pass
-			if done_a_a or  done_b_b:
+			if done_a_a and  done_b_b:
 				done = True
 				done_a_a = False
 				done_b_b = False
@@ -599,7 +633,7 @@ with tqdm.trange(max_episodes) as t:
 		# Show average episode reward every 10 episodes
 		if i % 10 == 0:
 			pass # print(f'Episode {i}: average reward: {avg_reward}')
-		# if i%2==0:
+		# if i%10==0:
 		test_model(model)
 
 
