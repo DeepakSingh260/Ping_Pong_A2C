@@ -296,6 +296,11 @@ num_hidden_units = 32
 
 model = Actor_Critic_A(num_actions, num_hidden_units)
 
+model_list = []
+
+for i in range(10):
+	model_list.append([0 , Actor_Critic_A(num_actions ,num_hidden_units),i+1])
+
 def env_step(action ,s):
 
 	state, reward, done = py_env._step(action,s)
@@ -344,9 +349,6 @@ def run_episode(initial_state_a , initial_state_b,  model, max_steps ) :
 		Second_Bool  = False
 
 		t = 0
-
-		
-
 
 
 		for _ in tf.range(max_steps):
@@ -402,12 +404,7 @@ def run_episode(initial_state_a , initial_state_b,  model, max_steps ) :
 				break
 			
 			t+=1
-	# print('aA' , len(aA))
-	# print('aB' , len(aB))
-	# print('vA' , len(vA))
-	# print('vb' , len(vB))
-	# print('rA' , len(rA))
-	# print('rB' , len(rB))
+
 	index = 0
 	for i in aA:
 		action_probsA = action_probsA.write(index , i) 
@@ -432,10 +429,6 @@ def run_episode(initial_state_a , initial_state_b,  model, max_steps ) :
 		rewardsA = rewardsA.write(index ,i)
 		index+=1
 
-	# tf.concat( [action_probsA,action_probsB],0)
-	# tf.concat( [valuesA,valuesB])
-
-	# rewardsA = tf.concat([rewardsA , rewardsB] ,1)
 	
 	action_probsA = action_probsA.stack()
 	valuesA = valuesA.stack()
@@ -446,9 +439,6 @@ def run_episode(initial_state_a , initial_state_b,  model, max_steps ) :
 	valuesB = valuesB.stack()
 	rewardsB = rewardsB.stack()
 
-	# print('action_probsA' , action_probsA)
-	# print('valuesA' , valuesA)
-	# print('rewardsA' , rewardsA)
 
 	return action_probsA, valuesA, rewardsA , action_probsA , valuesA , rewardsA
 
@@ -532,7 +522,7 @@ def train_step(initial_state_a,initial_state_b, model , optimizer, gamma, max_st
 	episode_reward = tf.math.reduce_sum(rewardsA)
 	# episode_reward_b = tf.math.reduce_sum(rewards_b)
 
-	return episode_reward
+	return episode_reward , model
 
 
 
@@ -542,15 +532,13 @@ min_episodes_criterion = 50000
 max_episodes = 50000
 max_steps_per_episode = 100000
 
-# Cartpole-v0 is considered solved if average reward is >= 195 over 100 
-# consecutive trials
 reward_threshold = 19500
 running_reward = 0
 
 # Discount factor for future rewards
 gamma = 0.99
 
-# Keep last episodes reward
+
 episodes_reward: collections.deque = collections.deque(maxlen=min_episodes_criterion)
 # episodes_rewardB: collections.deque = collections.deque(maxlen=min_episodes_criterion)
 
@@ -563,7 +551,7 @@ def test_model(model):
 		done_a_a = False
 		done_b_b = False
 		while not done:
-			clock.tick(30)
+			# clock.tick(30)+
 
 			state_a = tf.expand_dims(state_a, 0)
 			state_b = tf.expand_dims(state_b, 0)
@@ -612,35 +600,48 @@ def test_model(model):
 
 
 
+try:
+	with tqdm.trange(max_episodes) as t:
+		for i in t:
 
-with tqdm.trange(max_episodes) as t:
-	for i in t:
-		initial_state_a = tf.constant(tf_env_reset('a'))
-		initial_state_b = tf.constant(tf_env_reset('b'), dtype=tf.float32)
+			for i in range(len(model_list)):
+				initial_state_a = tf.constant(tf_env_reset('a'))
+				initial_state_b = tf.constant(tf_env_reset('b'), dtype=tf.float32)
+				print('model')
 
-		episode_reward = train_step(initial_state_a,initial_state_b, model, optimizer, gamma, max_steps_per_episode)
-		episode_reward = int(episode_reward)
-		# episode_reward_b = int(episode_reward_b)
-		episodes_reward.append(episode_reward)
-		running_reward = statistics.mean(episodes_reward)
-		# episodes_rewardB.append(episode_reward_b)
-		# running_reward_b = statistics.mean(episodes_rewardB)
+				episode_reward ,model_list[i][1]= train_step(initial_state_a,initial_state_b, model_list[i][1], optimizer, gamma, max_steps_per_episode)
+				episode_reward = int(episode_reward)
+				# episode_reward_b = int(episode_reward_b)
+				episodes_reward.append(episode_reward)
+				running_reward = statistics.mean(episodes_reward)
+				# episodes_rewardB.append(episode_reward_b)
+				# running_reward_b = statistics.mean(episodes_rewardB)
 
-		t.set_description(f'Episode {i}')
-		t.set_postfix(episode_reward=episode_reward, running_reward=running_reward)
-		# t.set_postfix(episode_reward=episode_reward_b, running_reward=running_reward_b)
+				t.set_description(f'Episode {i}')
+				t.set_postfix(episode_reward=episode_reward, running_reward=running_reward)
+				# t.set_postfix(episode_reward=episode_reward_b, running_reward=running_reward_b)
 
-		# Show average episode reward every 10 episodes
-		if i % 10 == 0:
-			pass # print(f'Episode {i}: average reward: {avg_reward}')
-		# if i%10==0:
-		test_model(model)
+				# Show average episode reward every 10 episodes
+				if i % 10 == 0:
+					pass # print(f'Episode {i}: average reward: {avg_reward}')
+				# if i%10==0:
+				test_model(model_list[i][1])
+			model_list = sorted(model_list , key = lambda l : l[0] , reverse = True)
+			model_list = model_list[:5]
+			for i in range(5):
+				model_list.append([0 , Actor_Critic_A(num_actions, num_hidden_units) , 6+i])
 
+			for i in range(10):
+				model_list[i][0]=0
 
-		# if running_reward > reward_threshold and running_reward > reward_threshold and i >= min_episodes_criterion:  
-		# 	break
+			# if running_reward > reward_threshold and running_reward > reward_threshold and i >= min_episodes_criterion:  
+			# 	break
 
-print(f'\nSolved at episode {i}: average reward: {running_reward:.2f}!')
+	print(f'\nSolved at episode {i}: average reward: {running_reward:.2f}!')
 
+finally:
+	if len(model_list)>0:
+		lt = sorted(model_list , key = lambda l : l[0] , reverse = True)
+		tf.keras.models.save_model(lt[0][1],'model/')
 
 
